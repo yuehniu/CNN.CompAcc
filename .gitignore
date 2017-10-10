@@ -1,5 +1,5 @@
 # ignore cache file
-torch/overfeat.multiGPU/imagenet/
+torch.overfeat/imagenet/
 
 # ignore weight and data file
 *.t7
