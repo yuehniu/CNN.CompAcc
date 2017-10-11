@@ -1,6 +1,9 @@
 # ignore cache file
-torch.overfeat/imagenet/
+torch.overfeat/imagenet/*
 
 # ignore weight and data file
 *.t7
+
+# ignore log file
+*.log
 
