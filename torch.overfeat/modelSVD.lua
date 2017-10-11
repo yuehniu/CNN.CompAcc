@@ -31,26 +31,43 @@ opt.imageSize = model.imageSize or opt.imageSize
 opt.imageCrop = model.imageCrop or opt.imageCrop
 
 print(opt)
-
--- Get weight matrix and do SVD
-wConv2 = torch.Tensor(model:get(4).weight:size()):copy(model:get(4).weight)
-wConv2Size = wConv2:size()
-wConv2_2d = wConv2:reshape(wConv2Size[1], wConv2Size[2]*wConv2Size[3]*wConv2Size[4])
-U,S,V = torch.svd(wConv2_2d)
-keepN = 128
-wConv2_2dKeep = U:sub(1,-1,1,keepN) * torch.diag(S:sub(1,keepN)) * V:sub(1,-1,1,keepN):t()
-wConv2Keep = wConv2_2dKeep:reshape(wConv2Size)
-model:get(4).weight:copy(wConv2Keep)
-
 cutorch.setDevice(opt.GPU) -- by default, use GPU 1
 torch.manualSeed(opt.manualSeed)
-
 print('Saving everything to: ' .. opt.save)
 os.execute('mkdir -p ' .. opt.save)
 
 paths.dofile('data.lua')
 paths.dofile('testOverfeat.lua')
 
-epoch = opt.epochNumber
+-- Get weight matrix and do SVD
+convLayer = {1, 4, 7, 9, 11, 13}
+-- convLayer = {1}
 
-test()
+epoch = opt.epochNumber
+rank_ = 4
+layer_ = 4
+for _, l_ in pairs(convLayer) do
+  print("Proc on ... ")
+  print(model:get(l_))
+  layer_ = l_
+  wConv = torch.Tensor(model:get(l_).weight:size()):copy(model:get(l_).weight)
+  size_ = wConv:size()
+  print('Transform tensor to 2-D matrix ...')
+  wConv2d = wConv:reshape(size_[1], size_[2]*size_[3]*size_[4])
+  print('Do SVD ...')
+  U,S,V = torch.svd(wConv2d)
+  
+  for kpN_ = 4, size_[1], 4 do
+    print('Keep ' .. kpN_ .. ' singular values ...')
+    wConv2dKp = U:sub(1,-1,1,kpN_) * torch.diag(S:sub(1,kpN_)) * V:sub(1,-1,1,kpN_):t()
+    wConv2Kp = wConv2dKp:reshape(size_)
+    model:get(l_).weight:copy(wConv2Kp)
+    test()
+    
+    epoch =  epoch + 1
+    rank_ = rank_ + 4;
+  end
+  print('Conv' .. l_ .. 'Done.')
+  rank_ = 4
+end
+

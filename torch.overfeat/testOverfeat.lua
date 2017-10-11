@@ -6,7 +6,9 @@
 --  LICENSE file in the root directory of this source tree. An additional grant
 --  of patent rights can be found in the PATENTS file in the same directory.
 --
-testLogger = optim.Logger(paths.concat(opt.save, 'test.log'))
+-- testLogger = optim.Logger(paths.concat(opt.save, 'test.log'))
+testLogger = io.open(paths.concat(opt.save, 'test.log'), 'w+')
+runLogger = io.open(paths.concat(opt.save, 'run.log'), 'w+')
 
 local batchNumber
 local top1_center, loss
@@ -15,6 +17,7 @@ local timer = torch.Timer()
 function test()
    print('==> doing epoch on validation data:')
    print("==> online epoch # " .. epoch)
+   print('==> convolution kernel rank ' .. rank_)
 
    batchNumber = 0
    cutorch.synchronize()
@@ -44,10 +47,23 @@ function test()
 
    top1_center = top1_center * 100 / nTest
    loss = loss / nTest -- because loss is calculated per batch
-   testLogger:add{
-      ['% top1 accuracy (test set) (center crop)'] = top1_center,
-      ['avg loss (test set)'] = loss
-   }
+   -- testLogger:add{
+   --    ['% top1 accuracy (test set) (center crop)'] = top1_center,
+   --    ['avg loss (test set)'] = loss
+   -- }
+   testLogger:write(string.format('ConvLayer: [%d], Epoch: [%d], Rank: [%d], Total Time(s): %.2f \t\t'
+                          .. 'average loss: %.2f \t '
+                          .. 'Top-1(%%):\t %.2f\t ',
+                       layer_, epoch, rank_, timer:time().real, loss, top1_center))
+   testLogger:write('\n')
+   testLogger:flush()
+   runLogger:write(string.format('ConvLayer: [%d], Epoch: [%d], Rank: [%d], Total Time(s): %.2f \t\t'
+                          .. 'average loss: %.2f \t '
+                          .. 'Top-1(%%):\t %.2f\t ',
+                       layer_, epoch, rank_, timer:time().real, loss, top1_center))
+   runLogger:write('\n\n')
+   runLogger:flush()
+
    print(string.format('Epoch: [%d][TESTING SUMMARY] Total Time(s): %.2f \t'
                           .. 'average loss (per batch): %.2f \t '
                           .. 'accuracy [Center](%%):\t top-1 %.2f\t ',
@@ -80,6 +96,9 @@ function testBatch(inputsCPU, labelsCPU)
       if pred_sorted[i][1] == g then top1_center = top1_center + 1 end
    end
    if batchNumber % 1024 == 0 then
-      print(('Epoch: Testing [%d], Loss: [%.2f], Accuracy: [%.2f](%%)----[%d/%d]'):format(epoch, loss/batchNumber, top1_center/batchNumber, batchNumber, nTest))
+      print(('Epoch: Testing [%d], Loss: [%.2f], Accuracy: [%.2f](%%)----[%d/%d]'):format(epoch, loss/batchNumber, top1_center*100/batchNumber, batchNumber, nTest))
+      runLogger:write(('Epoch: Testing [%d], Loss: [%.2f], Accuracy: [%.2f](%%)----[%d/%d]'):format(epoch, loss/batchNumber, top1_center*100/batchNumber, batchNumber, nTest))
+      runLogger:write('\n')
+      runLogger:flush()
    end
 end
