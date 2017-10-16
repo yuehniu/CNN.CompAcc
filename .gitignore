@@ -7,3 +7,6 @@ torch.overfeat/imagenet/*
 # ignore log file
 *.log
 
+# ignore swp file
+*.swp
+
