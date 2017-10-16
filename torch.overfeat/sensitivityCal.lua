@@ -109,6 +109,21 @@ print('sensitivity of Conv5: ' .. sensConv5)
 print('sensitivity of Conv6: ' .. sensConv6)
 print('Average sensitivity: ' .. sensAv)
 
+-- Calculate reserved rank under 2x acceleration
+reservRankConv1 =  torch.round(sensConv1 * 96 / 2 / sensAv);
+reservRankConv2 =  torch.round(sensConv2 * 256 / 2 / sensAv);
+reservRankConv3 =  torch.round(sensConv3 * 512 / 2 / sensAv);
+reservRankConv4 =  torch.round(sensConv4 * 512 / 2 / sensAv);
+reservRankConv5 =  torch.round(sensConv5 * 1024 / 2 / sensAv);
+reservRankConv6 =  torch.round(sensConv6 * 1024 / 2 / sensAv);
+print('Reseved rank of Conv1: ' .. reservRankConv1)
+print('Reseved rank of Conv2: ' .. reservRankConv2)
+print('Reseved rank of Conv3: ' .. reservRankConv3)
+print('Reseved rank of Conv4: ' .. reservRankConv4)
+print('Reseved rank of Conv5: ' .. reservRankConv5)
+print('Reseved rank of Conv6: ' .. reservRankConv6)
+
+gnuplot.figure()
 gnuplot.plot({rankConv1, top1Conv1},{rankConv2, top1Conv2},{rankConv3, top1Conv3},{rankConv4, top1Conv4},{rankConv5, top1Conv5},{rankConv6, top1Conv6})
 gnuplot.xlabel('Rank Fraction')
 gnuplot.ylabel('Top-1 Accuracy')
