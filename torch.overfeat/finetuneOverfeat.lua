@@ -48,11 +48,10 @@ local function paramsForEpoch(epoch)
     end
     local regimes = {
         -- start, end,    LR,   WD,
-        {  1,     18,   1e-2,   5e-4, },
-        { 19,     29,   5e-3,   5e-4  },
-        { 30,     43,   1e-3,   0 },
-        { 44,     52,   5e-4,   0 },
-        { 53,    1e8,   1e-4,   0 },
+        {  1,     3,   1e-3,   5e-4, },
+        { 3,     5,   5e-3,   5e-4  },
+        { 5,     7,   1e-4,   0 },
+        { 7,     10,   5e-4,   0 }
     }
 
     for _, row in ipairs(regimes) do
@@ -119,7 +118,8 @@ function train()
    trainLogger:write(string.format('Epoch: [%d], Total Time(s): %5.2f\t'
                                      .. 'Average loss: %.2f \t '
                                      .. 'Top-1(%%): %.2f\t',
-                                   epoch, tm:time().real, loss_epoch, top1_epoch)
+                                   epoch, tm:time().real, loss_epoch, top1_epoch))
+
    print(string.format('Epoch: [%d][TRAINING SUMMARY] Total Time(s): %.2f\t'
                           .. 'average loss (per batch): %.2f \t '
                           .. 'accuracy(%%):\t top-1 %.2f\t',
