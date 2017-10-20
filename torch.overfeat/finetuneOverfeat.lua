@@ -48,10 +48,11 @@ local function paramsForEpoch(epoch)
     end
     local regimes = {
         -- start, end,    LR,   WD,
-        {  1,     3,   1e-3,   5e-4, },
-        { 3,     5,   5e-3,   5e-4  },
-        { 5,     7,   1e-4,   0 },
-        { 7,     10,   5e-4,   0 }
+        {  1,     1,   1e-3,   5e-4, },
+        { 2,     2,   5e-3,   5e-4  },
+        { 3,     3,   1e-4,   0 },
+        { 4,     4,   5e-4,   0 },
+        { 5,     5,   1e-5,   0 }
     }
 
     for _, row in ipairs(regimes) do
@@ -63,7 +64,7 @@ end
 
 -- 2. Create loggers.
 -- trainLogger = optim.Logger(paths.concat(opt.save, 'train.log'))
-trainLogger = io.open(paths.concat(opt.save, 'train.log'))
+trainLogger = io.open(paths.concat(opt.save, 'train.log'), 'w+')
 local batchNumber
 local top1_epoch, loss_epoch
 
