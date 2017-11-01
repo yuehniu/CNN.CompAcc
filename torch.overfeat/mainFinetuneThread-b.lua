@@ -21,10 +21,14 @@ opt = opts.parse(arg)
 opt.netType = 'overfeat'
 opt.data = '/data/niuy/ml.DataSet/ILSVRC2012/'
 opt.cropSize = 221
-opt.retrain = "model.t7"
+-- opt.retrain = "model.t7"
+opt.retrain = "imagenet/checkpoint/overfeat/finetuneOverfeatThread-b-conv13/model_5.t7"
 -- opt.optimState = "imagenet/checkpoint/overfeat/TueOct1713:23:142017/optimState_5.t7"
+opt.optimState = "imagenet/checkpoint/overfeat/finetuneOverfeatThread-b-conv13/optimState_5.t7"
 opt.nEpochs = 5
 opt.epochSize = 5000
+opt.GPU = 1
+opt.nGPU = 1
 
 nClasses = opt.nClasses
 
@@ -42,17 +46,17 @@ print('Saving everything to: ' .. opt.save)
 os.execute('mkdir -p ' .. opt.save)
 
 paths.dofile('data.lua')
-paths.dofile('finetuneOverfeat.lua')
+paths.dofile('finetuneOverfeatThread-b.lua')
 paths.dofile('testOverfeat.lua')
 
 -- Convolution layer waiting for finetune
--- convLayer = {13, 11, 9, 7, 4, 1}
--- reservRank = {478, 443, 225, 232, 148, 61}
 convLayer = {13, 11, 9, 7, 4, 1}
 reservRank = {478, 443, 225, 232, 148, 61}
+-- convLayer = {1}
+-- reservRank = {61}
 
 
-for i_ = 1,5 do
+for i_ = 2,5 do
   print('Proc on ...')
   print(model:get(convLayer[i_]))
 
@@ -72,8 +76,10 @@ for i_ = 1,5 do
   wConv2dRecon = UCrop * VCrop;
 
   print('Decomposite Conv' .. convLayer[i_] .. '...')
+  dH = model:get(convLayer[i_]).dH
+  dW = model:get(convLayer[i_]).dW
   model:remove(convLayer[i_])
-  model:insert(nn.SpatialConvolution(sizeO_[2], reservRank[i_], 3, 3, 1, 1, 1, 1):noBias(), convLayer[i_])
+  model:insert(nn.SpatialConvolution(sizeO_[2], reservRank[i_], sizeO_[3], sizeO_[3], dH, dW, 1, 1):noBias(), convLayer[i_])
   size_ = model:get(convLayer[i_]).weight:size()
   model:get(convLayer[i_]).weight:copy(VCrop:reshape(size_))
   model:insert(nn.SpatialConvolution(reservRank[i_], sizeO_[1], 1, 1, 1, 1, 0, 0), convLayer[i_]+1)
@@ -82,6 +88,7 @@ for i_ = 1,5 do
   model:get(convLayer[i_]+1).bias:copy(bConv)
   print('Decomposite Conv' .. convLayer[i_] .. ' done')
   model:cuda()
+  model = makeDataParallel(model, opt.nGPU) -- defined in util.lua
   print(model)
 
   epoch = opt.epochNumber
