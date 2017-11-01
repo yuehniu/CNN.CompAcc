@@ -10,3 +10,11 @@ torch.overfeat/imagenet/*
 # ignore swp file
 *.swp
 
+# ignore design file in Vivado
+hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.ip_user_files/*
+hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.cache/*
+hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.hw/*
+hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.runs/*
+hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.sim/*
+hardware.VGGNet/fpga.vgg.16bit/.Xil/*
+hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.srcs/sources_1/ip/*
