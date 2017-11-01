@@ -18,3 +18,9 @@ hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.runs/*
 hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.sim/*
 hardware.VGGNet/fpga.vgg.16bit/.Xil/*
 hardware.VGGNet/fpga.vgg.16bit/vgg.16.bit.srcs/sources_1/ip/*
+hardware.VGGNet/sim.fc.16bit/sim/*
+hardware.VGGNet/sim.fc.16bit/.git/*
+hardware.VGGNet/sim.fc.16bit/.gitignore
+hardware.VGGNet/sim.fc.16bit/cache/*
+hardware.VGGNet/sim.fc.16bit/ip/*
+hardware.VGGNet/sim.fc.16bit/test/*
