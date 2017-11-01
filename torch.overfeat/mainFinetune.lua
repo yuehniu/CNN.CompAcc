@@ -21,8 +21,8 @@ opt = opts.parse(arg)
 opt.netType = 'overfeat'
 opt.data = '/data/niuy/ml.DataSet/ILSVRC2012/'
 opt.cropSize = 221
-opt.retrain = "imagenet/checkpoint/overfeat/TueOct1713:23:142017/model_5.t7"
-opt.optimState = "imagenet/checkpoint/overfeat/TueOct1713:23:142017/optimState_5.t7"
+opt.retrain = "imagenet/checkpoint/overfeat/ThuOct1919:57:292017/model_5.t7"
+opt.optimState = "imagenet/checkpoint/overfeat/ThuOct1919:57:292017/optimState_5.t7"
 opt.nEpochs = 5
 
 nClasses = opt.nClasses
@@ -47,11 +47,11 @@ paths.dofile('testOverfeat.lua')
 -- Convolution layer waiting for finetune
 -- convLayer = {13, 11, 9, 7, 4, 1}
 -- reservRank = {478, 443, 225, 232, 148, 61}
-convLayer = {11, 9, 7, 4, 1}
-reservRank = {443, 225, 232, 148, 61}
+convLayer = {4, 1}
+reservRank = {148, 61}
 
 
-for i_ = 1,5 do
+for i_ = 1,2 do
   print('Proc on ...')
   print(model:get(convLayer[i_]))
 
@@ -72,7 +72,7 @@ for i_ = 1,5 do
 
   print('Decomposite Conv' .. convLayer[i_] .. '...')
   model:remove(convLayer[i_])
-  model:insert(nn.SpatialConvolution(sizeO_[2], reservRank[i_], 3, 3, 1, 1, 1, 1):noBias(), convLayer[i_])
+  model:insert(nn.SpatialConvolution(sizeO_[2], reservRank[i_], sizeO_[3], sizeO_[3], 1, 1, 1, 1):noBias(), convLayer[i_])
   size_ = model:get(convLayer[i_]).weight:size()
   model:get(convLayer[i_]).weight:copy(VCrop:reshape(size_))
   model:insert(nn.SpatialConvolution(reservRank[i_], sizeO_[1], 1, 1, 1, 1, 0, 0), convLayer[i_]+1)

@@ -49,9 +49,9 @@ local function paramsForEpoch(epoch)
     local regimes = {
         -- start, end,    LR,   WD,
         {  1,     1,   1e-3,   5e-4, },
-        { 2,     2,   5e-3,   5e-4  },
+        { 2,     2,   5e-4,   5e-4  },
         { 3,     3,   1e-4,   0 },
-        { 4,     4,   5e-4,   0 },
+        { 4,     4,   5e-5,   0 },
         { 5,     5,   1e-5,   0 }
     }
 
