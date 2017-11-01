@@ -1,0 +1,213 @@
+/*-----------------------------------------------
+  This is project user-design source file for 
+  vivado project or vcs project. Any project 
+  must reference to this directory for source file.
+
+  module discription is as follows:
+------------------------------------------------*/
+
+---------------------
+|cnn_AVS_top.v
+|--------------------
+|* cnn_AVS_top.v2.0.v:
+|  cnn top module which feature,bias,weight check are all passed.
+|  feature check out is [16*22]
+|  bias check out is    [64]
+|  weight check out is  [32*3*3]
+|  check operationn cover 3*224*224 features,
+|                         3*64*3*3  weights
+|                         64        bias
+|
+|* cnn_AVS_top.v3.1.v:
+|  cnn top module which feature,bias,weight check are all passed.
+|  feature check out is [16*16]
+|  bias check out is    [64]
+|  weight check out is  [32*3*3]
+|  check operation cover 3*224*224 feature
+|                        3*64*3*3  weights
+|                        64        bias
+|
+| * cnn_AVS_top.v4.1.v
+|   cnn top module which consists feature out regs
+|   feature check out is [16*16]
+|   bias check out is    [64]
+|   weight check out is  [32*3*3]
+|   feature out is       [16*32*14*14]
+|
+| * cnn_AVS_top.v4.2.v
+|   add: add write_op module
+|--------------------
+
+-------------------
+|cnn_control.v
+-------------------
+| * cnn_control.v1.0.v
+|   cnn control module
+|   only control reading feature data
+|   from ddr and block ram
+|
+| * cnn_control.v2.1.v
+|   cnn control module
+|   control reading feature from ddr and block ram
+|   reading weight and bias from ddr
+|
+| * cnn_control.v4.1.v
+|   cnn control module
+|   add: control feature out regs
+|
+| * cnn_control.v4.2.v
+|   add: write feature data to ddr control
+|
+| * cnn_control.v4.3.v
+|   change: conv_en signal became a trigger signal
+-------------------
+
+-------------------
+|read_op.v
+-------------------
+| * read_op.v1.0.v:
+|   read module only consists read feature data
+|   from ddr and block ram
+|
+| * read_op.v2.1.v:
+|   read module consists read feature,weight and
+|   bias from ddr and ram
+-------------------
+
+-------------------
+|cnn_mem.v
+-------------------
+| * cnn_mem.v1.0.v:
+|   cnn memory module which only consists feature data
+|   feature data out is [16*22]
+|
+| * cnn_mem.v2.0.v:
+|   cnn_memory module which consists feature,bias,weight data
+|   feature data out is [16*22]
+|   weight out is       [32*3*3]
+|   bias out is         [64]
+|
+| * cnn_mem.v3.1.v:
+|   cnn_memory module which consists feature,bias,weight data
+|   feature data out is [16*16]
+|   weight out is       [32*3*3]
+|   bias out is         [64]
+|
+| * cnn_mem.v4.1.v:
+|   cnn memory set
+|   add: feature out regs
+|   add: wr ddr done signal
+-------------------
+
+-------------------
+|ram_offset.v
+-------------------
+| * ram_offset.v
+|   calculate ram offset in reading
+|   feature data from block ram
+-------------------
+
+-------------------
+|update_op.v
+-------------------
+| * update_op.v
+|   update buffer data from feature in regs to
+|   internel data buffer for next data fetching
+-------------------
+
+-------------------
+|ddr_sync.v
+-------------------
+| * ddr_sync.v
+|   make ddr output signal
+|   (data_valid, data)
+|   synchronous with user design signal
+-------------------
+
+-------------------
+|rd_ddr_data.v
+-------------------
+| * rd_ddr_data.v1.6.v 
+|   read feature data module from ddr
+|   has problem in readin last 14*7
+|   with position(30,30) in feature data
+|
+| * rd_ddr_data.v1.7.v
+|   read feature data module from ddr
+|   with no problem,other version has
+|   little problem
+-------------------
+
+-------------------
+|rd_ddr_param.v
+-------------------
+| * rd_ddr_param.v
+|   read param data module from ddr
+-------------------
+
+-------------------
+|feature_in_reg_matrix.v
+-------------------
+| * feature_in_reg_matrix.v1.0.v
+|
+| * feature_in_reg_matrix.v2.0.v
+|   feature data buffer
+|   feature out data is [16*22]
+|
+| * feature_in_reg_matrix.v3.0.v
+|   feature data buffer
+|   feature out data is [16*16]
+| 
+| * feature_in_reg_matrix.v3.2.v
+|   feature data buffer
+|   feature out data is [16*16]
+|   hight significant data section refer to
+|   low adress data
+|------------------
+
+-------------------
+|weight_reg_matrix.v
+-------------------
+| * weight_reg_matrix.v1.0.v
+|   weight data regs
+|
+| * weight_reg_matrix.v2.1.v
+|   weight data regs
+-------------------
+
+-------------------
+|bias_reg_array.v
+-------------------
+| * bias_reg_array.v1.0.v
+|   bias data regs with pure shifting realization
+|   but with little problem
+|
+| * bias_reg_array.v2.1.v
+|   bias data regs with addressing realization
+|   address is generated inside the module with
+|   shift method.
+|
+-------------------
+
+-------------------
+|feature_out_reg_matrix.v
+-------------------
+| * feature_out_reg_matrix.v1.0.v
+|   bisic feature_out buffer realization
+|
+| * feature_out_reg_matrix.v2.0.v
+|   add: write ddr done reset
+-------------------
+
+-------------------
+|feature_out_reg_unit.v
+-------------------
+| * feature_out_reg_unit.v1.0.v
+|   bisic feature out unit buffer realization
+|
+| * feature_out_reg_unit.v2.1.v
+|   add: write ddr done reset signal
+|
+| * feature_out_reg_unit.v2.2.v
+|   change: bias data order is reverted 
+-------------------

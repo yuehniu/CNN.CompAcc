@@ -1,0 +1,476 @@
+// ---------------------------------------------------
+// File       : rd_ddr_data.v
+//
+// Description: read data(patch and padding) from ddr
+//
+// Version    : 1.1 -- 16/Oct/11
+// ---------------------------------------------------
+
+module rd_ddr_data(
+    input  wire           clk,
+    input  wire           rst_n,
+    // ddr
+    input  wire           ddr_rd_data_valid,
+    input  wire           ddr_rdy,
+    input  wire [511:0]   ddr_rd_data,
+    output reg  [29:0]    ddr_addr,
+    output reg  [2:0]     ddr_cmd,
+    output reg            ddr_en,
+    //
+    input  wire           rd_data_bottom,
+    input  wire [8:0]     rd_data_end_of_x,
+    input  wire [8:0]     rd_data_end_of_y,
+    input  wire [8:0]     rd_data_x,          // column index of the patch, stable till end
+    input  wire [8:0]     rd_data_y,          // row index of the patch
+    input  wire           rd_data_first_fm,   // first input feature map
+    input  wire [29:0]    rd_data_bottom_ith_offset,  // ith bottom feature map size, stable till end
+    input  wire [29:0]    rd_data_bar_offset, // 14*rd_data_max_x*float_num_width/ddr_data)width
+    input  wire           rd_data_patch_bram_last,
+    input  wire           rd_data_patch_bram_valid,
+    output reg            rd_data_bram, // start read bram FSM
+    output reg  [511:0]   rd_data_data, // rearranged ddr data
+    output reg  [4:0]     rd_data_num_valid, // num of valid float data in rd_data_data
+    output reg            rd_data_valid,
+  	output wire           rd_data_first_valid,
+    output reg            rd_data_full
+  );
+
+  // states
+  localparam RD_DATA_RST        = 4'd0;
+  localparam RD_DATA_PATCH_BRAM = 4'd1;
+  localparam RD_DATA_PATCH_DDR  = 4'd2;
+  localparam RD_DATA_PADDING    = 4'd3;
+  // constant parameter
+  localparam FLOAT_NUM_WIDTH  = 32;
+  localparam DDR_DATA_WIDTH   = 64;
+  localparam DDR_BURST_LEN    = 8;
+  localparam RD_PATCH_WIDTH   = 14;
+  localparam RD_PATCH_HEIGHT  = 14;
+  // patch of size 14x7 --- micro patch
+  localparam RD_MICRO_1_SIZE  = RD_PATCH_HEIGHT*7*FLOAT_NUM_WIDTH/DDR_DATA_WIDTH;
+  localparam RD_MICRO_2_SIZE  = RD_PATCH_HEIGHT*14*FLOAT_NUM_WIDTH/DDR_DATA_WIDTH;
+  localparam RD_MICRO_3_SIZE  = RD_PATCH_HEIGHT*21*FLOAT_NUM_WIDTH/DDR_DATA_WIDTH;
+  // (0,y),   1+18+1, leading_burst + 18_all_valid_data_burst + tailing_burst, start from 0
+  localparam RD_PATCH0Y_CNT   = RD_MICRO_3_SIZE/DDR_BURST_LEN + 2 -1;
+  // (x,y),   1+12+1, leading_burst + 12_all_valid_data_burst + tailing_burst
+  localparam RD_PATCHXY_CNT   = RD_MICRO_2_SIZE/DDR_BURST_LEN + 2 -1;
+  // (end,y), 1+6+1, leading_burst + 6_all_valid_data_burst + tailing_burst
+  localparam RD_PATCHEY_CNT   = RD_MICRO_1_SIZE/DDR_BURST_LEN + 2 -1;
+  localparam RD_PADDING0Y_CNT = 6;
+  localparam RD_PADDINGXY_CNT = 4;
+  localparam RD_PADDINGEY_CNT = 2;
+  localparam RD_TOTAL0Y_CNT   = RD_PATCH0Y_CNT + RD_PADDING0Y_CNT;
+  localparam RD_TOTALXY_CNT   = RD_PATCHXY_CNT + RD_PADDINGXY_CNT;
+  localparam RD_TOTALEY_CNT   = RD_PATCHEY_CNT + RD_PADDINGEY_CNT;
+
+  reg  [3:0]    _rd_data_state;
+  reg  [3:0]    _rd_data_next_state;
+  reg  [29:0]   _rd_data_patch_addr;
+  reg  [29:0]   _rd_data_patch_addr_offset;
+  reg           _rd_data_patch_next_burst;
+  reg  [4:0]    _rd_data_patch_cnt;   // num of burst read from ddr, max: 20
+  reg  [4:0]    _rd_data_valid_cnt;   // valid data extracted from ddr, max: 19+3
+  reg  [511:0]  _rd_data_data_last_clk; // data on previous clk
+  reg           _rd_data_patch_ddr_last; // last burst to read
+  reg           _rd_data_output_last;   // last valid output data
+  reg           _rd_data_fifo_top_valid; // top half of concatenated data valid
+  wire [1023:0] _rd_data_data_mux; // used in data multiplexer
+  reg           _rd_data_patch_valid_last;
+  reg  [2:0]    _rd_data_mux_sel;
+
+  reg  [29:0]   _rd_data_padding_addr;
+  reg  [29:0]   _rd_data_padding_addr_offset;
+  reg           _rd_data_padding_next_padding_at_next_clk; // next micro-patch padding at next clk
+  reg           _rd_data_padding_next_step; // next addr to read
+  reg  [2:0]    _rd_data_padding_cnt; // max: 6
+  reg           _rd_data_padding_stop; // stop reading ddr
+  wire [29:0]   _rd_data_padding_addr_2_ddr; // addr to read
+  reg           _rd_data_on_padding_cnt;
+
+  assign rd_data_first_valid = (_rd_data_valid_cnt==5'd0) && ddr_rd_data_valid;
+  assign _rd_data_padding_addr_2_ddr = _rd_data_padding_addr + _rd_data_padding_addr_offset;
+
+  // FF
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_state <= RD_DATA_RST;
+    end else begin
+      _rd_data_state <= _rd_data_next_state;
+    end
+  end
+  // state transition
+  always@(_rd_data_state or rd_data_bottom or rd_data_x or rd_data_y or
+           rd_data_patch_bram_last or _rd_data_patch_ddr_last or _rd_data_output_last
+          ) begin
+    _rd_data_next_state = RD_DATA_RST;
+    case(_rd_data_state)
+      RD_DATA_RST: begin
+        if(rd_data_bottom) begin
+          if(rd_data_x == 9'h0) begin
+            _rd_data_next_state = RD_DATA_PATCH_DDR;
+          end else begin
+            _rd_data_next_state = RD_DATA_PATCH_BRAM;
+          end
+        end else begin
+          _rd_data_next_state = RD_DATA_RST;
+        end
+      end
+
+      RD_DATA_PATCH_BRAM: begin
+        if(rd_data_patch_bram_last) begin
+          _rd_data_next_state = RD_DATA_PATCH_DDR;
+        end else begin
+          _rd_data_next_state = RD_DATA_PATCH_BRAM;
+        end
+      end
+
+      RD_DATA_PATCH_DDR: begin
+        if(_rd_data_patch_ddr_last) begin
+          _rd_data_next_state = RD_DATA_PADDING;
+        end else begin
+          _rd_data_next_state = RD_DATA_PATCH_DDR;
+        end
+      end
+
+      RD_DATA_PADDING: begin
+        if(_rd_data_output_last) begin
+          _rd_data_next_state = RD_DATA_RST;
+        end else begin
+          _rd_data_next_state = RD_DATA_PADDING;
+        end
+      end
+    endcase
+  end
+
+  // logic
+  always@(_rd_data_state or rd_data_patch_bram_valid or ddr_rdy or
+          ddr_rd_data_valid or _rd_data_output_last or
+          _rd_data_patch_addr or _rd_data_patch_addr_offset or
+          _rd_data_padding_next_padding_at_next_clk or _rd_data_padding_addr_2_ddr or
+          _rd_data_padding_stop
+         ) begin
+    ddr_en  = 1'b0;
+    ddr_cmd = 3'h1;
+    ddr_addr= 30'h0;
+    rd_data_full  = 1'b0;
+    rd_data_bram  = 1'b0; // start read bram FSM
+    _rd_data_patch_next_burst   = 1'b0;
+    _rd_data_padding_next_step  = 1'b0;
+
+    case(_rd_data_state)
+      RD_DATA_RST: begin
+        ddr_en = 1'b0;
+        ddr_cmd = 3'h1;
+        ddr_addr= 30'h0;
+      end
+
+      RD_DATA_PATCH_BRAM: begin
+        if(!rd_data_patch_bram_valid) begin
+          rd_data_bram = 1'b1; // start read bram FSM
+        end
+      end
+
+      RD_DATA_PATCH_DDR: begin
+        if(ddr_rdy) begin
+          ddr_en  = 1'b1;
+          ddr_cmd = 3'b1;
+          // mask last 3 bit, set ddr_addr dividable by 8 with no remainder
+          ddr_addr= {_rd_data_patch_addr[29:3],3'b0} + _rd_data_patch_addr_offset;
+          _rd_data_patch_next_burst = 1'b1;
+        end else begin
+          ddr_en  = 1'b0;
+          ddr_cmd = 3'b1;
+          ddr_addr= {_rd_data_patch_addr[29:3],3'b0} + _rd_data_patch_addr_offset;
+        end
+      end
+
+      RD_DATA_PADDING: begin
+        if(ddr_rdy) begin
+          ddr_cmd = 3'b1;
+          if(_rd_data_padding_next_padding_at_next_clk) begin
+            ddr_addr = {_rd_data_padding_addr_2_ddr[29:3],3'b0} + DDR_BURST_LEN;
+          end else begin
+            ddr_addr = {_rd_data_padding_addr_2_ddr[29:3],3'b0};
+          end
+          if(_rd_data_padding_stop) begin
+            ddr_en  = 1'b0;
+            _rd_data_padding_next_step = 1'b0;
+          end else begin
+            ddr_en  = 1'b1;
+            _rd_data_padding_next_step = 1'b1;
+          end
+        end else begin
+          ddr_en = 1'b0;
+          if(_rd_data_padding_next_padding_at_next_clk) begin
+            ddr_addr = {_rd_data_padding_addr_2_ddr[29:3],3'b0} + DDR_BURST_LEN;
+          end else begin
+            ddr_addr = {_rd_data_padding_addr_2_ddr[29:3],3'b0};
+          end
+        end
+
+        if(_rd_data_output_last) begin
+          rd_data_full = 1'b1;
+        end
+      end
+    endcase
+  end
+
+  // patch base addr & padding base addr
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_patch_addr   <= 30'h0;
+      _rd_data_padding_addr <= 30'h0;
+    end else begin
+      if(rd_data_bottom && rd_data_first_fm && (_rd_data_state==RD_DATA_RST)) begin
+        if(rd_data_x==9'h0) begin
+          if(rd_data_y==9'h0)begin
+            _rd_data_patch_addr   <= 30'h0;
+            _rd_data_padding_addr <= rd_data_bar_offset;
+          end else begin
+            _rd_data_patch_addr   <= _rd_data_patch_addr + RD_MICRO_1_SIZE;
+            _rd_data_padding_addr <= _rd_data_padding_addr + RD_MICRO_1_SIZE;
+          end
+        end else if(rd_data_x==9'h1) begin
+          _rd_data_patch_addr   <= _rd_data_patch_addr + RD_MICRO_3_SIZE;
+          _rd_data_padding_addr <= _rd_data_padding_addr + RD_MICRO_3_SIZE; 
+        end else begin
+          _rd_data_patch_addr   <= _rd_data_patch_addr + RD_MICRO_2_SIZE;
+          _rd_data_padding_addr <= _rd_data_padding_addr + RD_MICRO_2_SIZE; 
+        end
+      end
+    end
+  end
+
+  // patch addr offset & padding addr offset
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_patch_addr_offset    <= 30'h0;
+      _rd_data_padding_addr_offset  <= 30'h0;
+    end else begin
+      if(rd_data_bottom && (_rd_data_state==RD_DATA_RST)) begin
+        _rd_data_patch_addr_offset    <= rd_data_bottom_ith_offset;
+        _rd_data_padding_addr_offset  <= rd_data_bottom_ith_offset;
+      end else begin
+        if(_rd_data_patch_next_burst) begin
+          _rd_data_patch_addr_offset <= _rd_data_patch_addr_offset + DDR_BURST_LEN;
+        end
+        if(_rd_data_padding_next_padding_at_next_clk && ddr_rdy) begin
+          _rd_data_padding_addr_offset <= _rd_data_padding_addr_offset + RD_MICRO_1_SIZE;
+        end
+      end
+    end
+  end
+
+  // patch count, padding count & valid count
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_patch_cnt    <= 5'h0;
+      _rd_data_valid_cnt    <= 5'h0;
+      _rd_data_padding_cnt  <= 3'h0;
+    end else begin
+      if(rd_data_bottom && (_rd_data_state==RD_DATA_RST)) begin
+        _rd_data_patch_cnt  <= 5'h0;
+        _rd_data_valid_cnt  <= 5'h0;
+        _rd_data_padding_cnt<= 3'h0;
+      end else begin
+        if(_rd_data_patch_next_burst) begin
+          _rd_data_patch_cnt <= _rd_data_patch_cnt + 1'b1;
+        end
+        if(ddr_rd_data_valid) begin
+          _rd_data_valid_cnt <= _rd_data_valid_cnt + 1'b1;
+        end
+        if(_rd_data_padding_next_step) begin
+          _rd_data_padding_cnt <= _rd_data_padding_cnt + 1'b1;
+        end
+      end
+    end
+  end
+
+  // next padding at next clock
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_padding_next_padding_at_next_clk <= 1'b0;
+    end else begin
+      if(_rd_data_padding_next_step) begin
+        _rd_data_padding_next_padding_at_next_clk <= (!_rd_data_padding_next_padding_at_next_clk);
+      end
+    end
+  end
+
+  // termination
+  always@(rst_n or rd_data_x or _rd_data_patch_cnt or rd_data_end_of_x or
+          _rd_data_valid_cnt or _rd_data_padding_cnt
+          ) begin
+    if(!rst_n) begin
+      _rd_data_patch_ddr_last = 1'b0;
+      _rd_data_patch_valid_last = 1'b0;
+      _rd_data_output_last      = 1'b0;
+      _rd_data_padding_stop     = 1'b0;
+    end else begin
+      if(rd_data_x==9'h0) begin // (0,y)
+        // patch read
+        if(_rd_data_patch_cnt==RD_PATCH0Y_CNT) _rd_data_patch_ddr_last=1'b1;
+        else                                   _rd_data_patch_ddr_last=1'b0;
+        // padding read
+        if(_rd_data_padding_cnt==RD_PADDING0Y_CNT)  _rd_data_padding_stop=1'b1;
+        else                                        _rd_data_padding_stop=1'b0;
+        // valid
+        if(_rd_data_valid_cnt==RD_PATCH0Y_CNT) begin
+          _rd_data_patch_valid_last = 1'b1;
+          _rd_data_output_last      = 1'b0;
+        end else if(_rd_data_valid_cnt==RD_TOTAL0Y_CNT) begin
+          _rd_data_patch_valid_last = 1'b0;
+          _rd_data_output_last      = 1'b1;
+        end else begin
+          _rd_data_patch_valid_last = 1'b0;
+          _rd_data_output_last      = 1'b0;
+        end
+      end else if(rd_data_x==rd_data_end_of_x) begin // (end,y)
+        if(_rd_data_patch_cnt==RD_PATCHEY_CNT) _rd_data_patch_ddr_last=1'b1;
+        else                                   _rd_data_patch_ddr_last=1'b0;
+        if(_rd_data_padding_cnt==RD_PADDINGEY_CNT)  _rd_data_padding_stop=1'b1;
+        else                                        _rd_data_padding_stop=1'b0;
+        if(_rd_data_valid_cnt==RD_PATCHEY_CNT) begin
+          _rd_data_patch_valid_last = 1'b1;
+          _rd_data_output_last      = 1'b0;
+        end else if(_rd_data_valid_cnt==RD_TOTALEY_CNT) begin
+          _rd_data_patch_valid_last = 1'b0;
+          _rd_data_output_last      = 1'b1;
+        end else begin
+          _rd_data_patch_valid_last = 1'b0;
+          _rd_data_output_last      = 1'b0;
+        end
+      end else begin // (x,y)
+        if(_rd_data_patch_cnt==RD_PATCHXY_CNT) _rd_data_patch_ddr_last=1'b1;
+        else                                   _rd_data_patch_ddr_last=1'b0;
+        if(_rd_data_padding_cnt==RD_PADDINGXY_CNT)  _rd_data_padding_stop=1'b1;
+        else                                        _rd_data_padding_stop=1'b0;
+        if(_rd_data_valid_cnt==RD_PATCHXY_CNT) begin
+          _rd_data_patch_valid_last = 1'b1;
+          _rd_data_output_last      = 1'b0;
+        end else if(_rd_data_valid_cnt==RD_TOTALXY_CNT) begin
+          _rd_data_patch_valid_last = 1'b0;
+          _rd_data_output_last      = 1'b1;
+        end else begin
+          _rd_data_patch_valid_last = 1'b0;
+          _rd_data_output_last      = 1'b0;
+        end
+      end
+    end
+  end
+
+  // last ddr output, lag one clk behind
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_data_last_clk  <= 512'h0;
+    end else begin
+      if(ddr_rd_data_valid) begin
+        _rd_data_data_last_clk  <= ddr_rd_data;
+      end
+    end
+  end
+  // top half of concatenated data is valid
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_fifo_top_valid <= 1'b0;
+      _rd_data_on_padding_cnt <= 1'b0;
+    end else begin
+      if(rd_data_bottom && (_rd_data_state==RD_DATA_RST)) begin
+        _rd_data_fifo_top_valid <= 1'b0;
+        _rd_data_on_padding_cnt <= 1'b0;
+      end else begin
+        if(_rd_data_patch_valid_last) begin
+          _rd_data_fifo_top_valid <= 1'b0;
+          _rd_data_on_padding_cnt <= 1'b1;
+        end else begin
+          if(_rd_data_on_padding_cnt) begin
+          //on counting padding:
+            if(_rd_data_fifo_top_valid && ddr_rd_data_valid) begin
+              _rd_data_fifo_top_valid <= 1'b0;
+            end else begin
+              if(ddr_rd_data_valid) begin
+                _rd_data_fifo_top_valid <= 1'b1;
+              end
+            end
+          end else begin
+          //on counting patch:
+            if(ddr_rd_data_valid) begin
+              _rd_data_fifo_top_valid <= 1'b1;
+            end
+          end
+        end
+      end
+    end
+  end
+
+  // output multiplexer
+  assign _rd_data_data_mux = {_rd_data_data_last_clk,ddr_rd_data};
+  // output data valid
+  always@(_rd_data_fifo_top_valid or ddr_rd_data_valid or _rd_data_patch_addr or
+          _rd_data_on_padding_cnt or _rd_data_patch_valid_last or rd_data_x or
+          rd_data_end_of_x
+          ) begin
+    if(_rd_data_fifo_top_valid && ddr_rd_data_valid) begin
+      rd_data_valid = 1'b1;
+      //on counting patch:
+      if(!_rd_data_on_padding_cnt) begin
+        if(_rd_data_patch_valid_last) begin
+          if(rd_data_x==9'h0) begin
+            rd_data_num_valid = 5'h6;
+          end else if(rd_data_x==rd_data_end_of_x) begin
+            rd_data_num_valid = 5'h2;
+          end else begin
+            rd_data_num_valid = 5'h4;
+          end
+        end else begin
+          rd_data_num_valid = 5'h10;
+        end
+      //on counting padding:
+      end else begin
+        rd_data_num_valid = 5'h7;
+      end
+    end else begin
+      rd_data_valid     = 1'b0;
+      rd_data_num_valid = 5'h0;
+    end
+  end
+
+  // multiplexer
+  always@(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      _rd_data_mux_sel <= 3'h0;
+    end else begin
+      if(rd_data_bottom && (_rd_data_state==RD_DATA_RST)) begin
+        _rd_data_mux_sel <= 3'b0;
+      end else begin
+        if(_rd_data_patch_valid_last) begin // last patch output, select padding_addr at next clock
+          _rd_data_mux_sel <= _rd_data_padding_addr[2:0];
+        end else if(_rd_data_on_padding_cnt) begin
+          if(_rd_data_fifo_top_valid && ddr_rd_data_valid) begin
+            _rd_data_mux_sel <= _rd_data_mux_sel + 1'b1;
+          end
+        end else begin
+          _rd_data_mux_sel <= _rd_data_patch_addr[2:0];
+        end
+      end
+    end
+  end
+
+  always@(rd_data_valid or ddr_rd_data_valid or _rd_data_mux_sel or _rd_data_data_mux) begin
+    if(rd_data_valid && ddr_rd_data_valid) begin
+      case(_rd_data_mux_sel)
+        3'h0: rd_data_data = _rd_data_data_mux[1023- 0*32 : 1023-511- 0*32];
+        3'h1: rd_data_data = _rd_data_data_mux[1023- 2*32 : 1023-511- 2*32];
+        3'h2: rd_data_data = _rd_data_data_mux[1023- 4*32 : 1023-511- 4*32];
+        3'h3: rd_data_data = _rd_data_data_mux[1023- 6*32 : 1023-511- 6*32];
+        3'h4: rd_data_data = _rd_data_data_mux[1023- 8*32 : 1023-511- 8*32];
+        3'h5: rd_data_data = _rd_data_data_mux[1023-10*32 : 1023-511-10*32];
+        3'h6: rd_data_data = _rd_data_data_mux[1023-12*32 : 1023-511-12*32];
+        3'h7: rd_data_data = _rd_data_data_mux[1023-14*32 : 1023-511-14*32];
+      endcase
+    end else begin
+      rd_data_data = {512{1'b1}};
+    end
+  end
+
+endmodule
