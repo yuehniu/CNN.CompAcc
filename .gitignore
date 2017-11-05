@@ -24,3 +24,6 @@ hardware.VGGNet/sim.fc.16bit/.gitignore
 hardware.VGGNet/sim.fc.16bit/cache/*
 hardware.VGGNet/sim.fc.16bit/ip/*
 hardware.VGGNet/sim.fc.16bit/test/*
+
+# ignore object file
+*.o
