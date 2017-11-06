@@ -22,9 +22,9 @@ opt.netType = 'overfeat'
 opt.data = '/data/niuy/ml.DataSet/ILSVRC2012/'
 opt.cropSize = 221
 -- opt.retrain = "model.t7"
-opt.retrain = "imagenet/checkpoint/overfeat/finetuneOverfeatThread-b-conv13/model_5.t7"
+opt.retrain = "imagenet/checkpoint/overfeat/finetuneOverfeatThread-b-conv13-4-wellSolver/model_5.t7"
 -- opt.optimState = "imagenet/checkpoint/overfeat/TueOct1713:23:142017/optimState_5.t7"
-opt.optimState = "imagenet/checkpoint/overfeat/finetuneOverfeatThread-b-conv13/optimState_5.t7"
+opt.optimState = "imagenet/checkpoint/overfeat/finetuneOverfeatThread-b-conv13-4-wellSolver/optimState_5.t7"
 opt.nEpochs = 5
 opt.epochSize = 5000
 opt.GPU = 1
@@ -56,7 +56,7 @@ reservRank = {478, 443, 225, 232, 148, 61}
 -- reservRank = {61}
 
 
-for i_ = 2,5 do
+for i_ = 6,6 do
   print('Proc on ...')
   print(model:get(convLayer[i_]))
 

@@ -41,7 +41,7 @@ paths.dofile('test.lua')
 epoch = opt.epochNumber
 
 for i=1,opt.nEpochs do
-   train()
+   --train()
    test()
    epoch = epoch + 1
 end
