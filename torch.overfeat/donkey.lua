@@ -15,9 +15,9 @@ paths.dofile('util.lua')
 ------------------------------------------
 
 -- a cache file of the training metadata (if doesnt exist, will be created)
-local trainCache = paths.concat(opt.cache, 'trainCache.t7')
-local testCache = paths.concat(opt.cache, 'testCache.t7')
-local meanstdCache = paths.concat(opt.cache, 'meanstdCache.t7')
+local trainCache = paths.concat(opt.cache, 'trainCache.Overfeat.big.t7')
+local testCache = paths.concat(opt.cache, 'testCache.Overfeat.big.t7')
+local meanstdCache = paths.concat(opt.cache, 'meanstdCache.Overfeat.big.t7')
 
 -- Check for existence of opt.data
 if not os.execute('cd ' .. opt.data) then
@@ -59,6 +59,8 @@ local trainHook = function(self, path)
    local oH = sampleSize[2]
    local h1 = math.ceil(torch.uniform(1e-2, iH-oH))
    local w1 = math.ceil(torch.uniform(1e-2, iW-oW))
+   -- print('iW: ' .. iW)
+   -- print('iH: ' .. iH)
    local out = image.crop(input, w1, h1, w1 + oW, h1 + oH)
    assert(out:size(3) == oW)
    assert(out:size(2) == oH)
