@@ -27,3 +27,4 @@ hardware.VGGNet/sim.fc.16bit/test/*
 
 # ignore object file
 *.o
+*.so
