@@ -23,6 +23,7 @@ opt.data = '/data/niuy/ml.DataSet/ILSVRC2012/'
 opt.cropSize = 221
 opt.retrain = "model.t7"
 opt.nEpochs = 5
+opt.epochSize = 5000
 
 nClasses = opt.nClasses
 
@@ -41,10 +42,12 @@ os.execute('mkdir -p ' .. opt.save)
 
 paths.dofile('data.lua')
 paths.dofile('finetuneOverfeat.lua')
-paths.dofile('finetuneOverfeat.lua')
+paths.dofile('testOverfeat.lua')
 
 epoch = opt.epochNumber
 
+rank_ = 1
+layer_ = 1
 for i=1,opt.nEpochs do
    train()
    test()
